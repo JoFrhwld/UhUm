@@ -1,0 +1,55 @@
+---
+title: "Process PNC UhUm Data"
+author: "Josef Fruehwald"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+# Generate Um and Uh Data
+
+```{r}
+library(UhUm)
+library(dplyr)
+```
+
+Run `system.file("extdata/PNC_uh_um.txt", package = "UhUm")` to see where the raw data is located on your system.
+```{r}
+um_raw_PNC <- read.delim(system.file("extdata/PNC_uh_um.txt", package = "UhUm"))
+```
+
+Not for general distribution yet.
+```{r}
+demographics <- read.delim("/Volumes/jfruehwa/PNC/PNC_corpus_info.txt")
+```
+
+Process demographics for public consumption
+```{r}
+demographics %>% 
+  mutate(idstring = gsub("(PH[0-9]+-[0-9]+-[0-9]+-).*", "\\1", speaker))%>%
+  select(-speaker)->demographics
+```
+
+Join onto um data
+```{r}
+um_raw_PNC %>%
+  left_join(demographics, by = "idstring")%>%
+  filter(!is.na(age))-> um_PNC
+```
+
+A glimpse of the result
+
+```{r}
+um_PNC %>% glimpse()
+```
+
+Save the result (not to be run every time)
+
+```{r}
+# save(um_PNC, file="data/um_PNC.rda")
+# write.table(um_PNC, file = "inst/extdata/PNC_uh_um_demographics.txt", 
+#             sep = "\t", row.names = F)
+```

@@ -1,0 +1,146 @@
+---
+title: "The PNC Data"
+author: "Josef Fruehwald"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+# The raw data
+
+If you've installed the R package, the raw PNC data with demographic information can be found at `system.file("extdata/PNC_uh_um_demographics.txt", package = "UhUm")`. You should also be able to access it directly in an R session.
+
+Packages used in this vignette:
+```{r message=FALSE}
+  library(UhUm)
+  library(dplyr)
+  library(reshape2)
+  library(ggplot2)
+  library(mgcv)
+```
+
+A glimpse at the data:
+```{r}
+  um_PNC %>% glimpse()
+```
+
+
+## Um Preference
+
+First, the basic effect, looking just at "um" preference. It's a pretty wopping date of birth effect.
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%"}
+  um_PNC %>%
+    mutate(DOB = year-age,
+           dob_decade = floor(DOB/10)*10,
+           age_decade = floor(age/10)*10,
+           # this coerces a logical to numeric
+           is_um = (word == "UM")*1)%>%
+    group_by(age, year, DOB, sex, age_decade, dob_decade, idstring)%>%
+    summarise(um_pref = mean(is_um),
+              n = n())->speaker_prefs
+
+  ggplot(speaker_prefs, aes(DOB, um_pref, color = sex))+
+    geom_point(aes(size = n))+
+    stat_smooth(se = F)+
+    scale_size_area()+
+    theme_bw()
+```
+
+Trying to tease apart generational effects from lifespan effect. Each date of birth cohort looks fairly flat. 
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%"}
+  speaker_prefs %>%
+    group_by(sex, age_decade, dob_decade)%>%
+    summarise(um_pref = mean(um_pref),
+              n = n())%>%
+    ggplot(., aes(age_decade, um_pref, color = sex))+
+      geom_point(aes(size = n))+
+      geom_line(aes(group = sex))+
+      scale_size_area()+
+      facet_wrap(~dob_decade)
+
+```
+
+
+Estimating the gender effect in each date of birth cohort. Looks to be narrowing as people converge on maximal "UM".
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%"}
+  speaker_prefs%>%
+    group_by(sex, dob_decade)%>%
+    summarise(um_pref = mean(um_pref))%>%
+    dcast(dob_decade ~ sex)%>%
+    mutate(ratio = f/m)%>%
+      ggplot(., aes(dob_decade, f/m))+
+        geom_point()+
+        geom_line()+
+        geom_hline(y = 1)+
+        scale_y_continuous(trans = "log2")+
+        theme_bw()
+```
+
+
+Just messing around to see if "uh" to "um" could be construed as a gradual or gradient adding on of the final nasal. Doesn't really look like it.
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%"}
+  um_PNC%>%
+    filter(word == "UM")%>%
+    mutate(DOB = year-age,
+           nasal_ratio = (nasal_end-nasal_start)/(vowel_end-vowel_start))%>%
+    group_by(DOB, sex, idstring)%>%
+    summarise(log_mean = mean(log(nasal_ratio)))%>%
+    ggplot(., aes(DOB, log_mean, color = sex))+
+      geom_point()+
+      stat_smooth(se = F)+
+      theme_bw()
+```
+
+
+## Location in discourse
+
+So how about this turn inital "um"? The PNC isn't annotated for turns exactly, but looking just at whether it's speech chunk initial, it looks like there *is* an effect, but it's not gender stratified, and affects both words.
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  initial_um <- um_PNC%>%
+                    #filter out co-extensive ums
+                    filter(!(start_time == chunk_start & end_time == chunk_end))%>%
+                    mutate(initial = (chunk_start == start_time)*1)
+
+  initial_um %>%
+      group_by(idstring, word, age, year, sex) %>%
+      summarise(prop_initial = mean(initial))%>%
+      ggplot(., aes(year-age, prop_initial, color = sex, shape = word, linetype = word))+
+        geom_point()+
+        theme_bw()+
+        ggtitle("Raw Data")
+
+  initial_um %>%
+      mutate(dob_decade = (floor((year-age)/10))*10)%>%
+      group_by(word, dob_decade, sex, idstring) %>%
+      summarise(prop_initial = mean(initial))%>%
+      summarise(prop_initial = mean(prop_initial))%>%
+      ggplot(., aes(dob_decade, prop_initial, color=sex, linetype = word, shape = word))+
+        geom_point()+
+        geom_line()+
+        theme_bw()+
+        ggtitle("By Decade Averages")
+```
+
+If we exclude absolute initial cases, are filled pauses drifting towards the front of speech chunks? Maybe? The slope is kind of weak though.
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  um_PNC %>%
+    filter(chunk_start != start_time)%>%
+    mutate(chunk_dur = chunk_end - chunk_start,
+           rel_start = start_time - chunk_start,
+           prop_start = rel_start/chunk_dur)%>%
+    group_by(age, year, sex, word, idstring)%>%
+    summarise(prop_start = mean(prop_start))%>%
+    ggplot(., aes(year-age, prop_start, color = sex, shape = word, linetype = word))+
+      geom_point()+
+      stat_smooth(se = F)+
+      theme_bw()
+```
+

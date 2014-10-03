@@ -1,0 +1,15 @@
+Package: UhUm
+Type: Package
+Title: Data on Um and Uh
+Version: 0.1
+Date: 2014-09-30
+Authors@R: c(
+    person("Josef", "Fruehwald", email = "josef.frueh@ed.ac.uk",
+    role = c("aut", "cre"))
+    )
+Description: Data and code for um uh study.
+License: MIT
+Suggests:
+    knitr
+VignetteBuilder: knitr
+LazyData: true

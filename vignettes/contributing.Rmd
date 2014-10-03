@@ -1,0 +1,76 @@
+---
+title: "Contributing"
+author: "Josef Fruehwald"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+If you want to contribute data to the UhUm package, first, fork the repository on Github and clone it. Secondly, I would recommend installing the `devtools` and `roxygen2` packages, which are what I have used to create this package in the first place.
+
+## Documenting Data Generation
+
+I would recommend putting any scripts that were used in generating data in an appropriate directory in `inst`, and saving the raw tab delimited data to `inst/extdata`.
+
+## Adding the data to the package
+
+To add the data to the package, first load the data into R and assign it to a descriptively named object. Then, save that object to `data` as an rda file with the same name. For the PNC data, that looked like this:
+
+```{r eval = F}
+um_PNC <- read.delim("inst/extdata/PNC_uh_um_demographics.txt")
+save(um_PNC, "data/um_PNC.rda")
+```
+
+Then, add documentation for the data set to the `R/data.R` file. The PNC documentation looks like this:
+
+```{r eval = F}
+#' Uh and Um data from the PNC
+#' @format a data frame with 19 columns. Speech chunks were defined by 
+#' continuous speech bordered on each side by a pause of 200 miliseconds or more
+#'  \describe{
+#'    \item{idstring}{Unique id string for each speaker}
+#'    \item{word}{\code{UM} or \code{UH}}
+#'    \item{start_time}{Onset time of filled pause, in seconds}
+#'    \item{end_time}{Offset time of filled pause, in seconds}
+#'    \item{vowel_start}{Onset time of filled pause vowel}
+#'    \item{vowel_end}{Offset time of filled pause vowel}
+#'    \item{nasal_start}{Onset time of nasal, if \code{UM}}
+#'    \item{nasal_end}{Offset time of nasal, if \code{UM}}
+#'    \item{chunk_start}{Onset time of speech chunk}
+#'    \item{chunk_end}{Offset time of speech chunk}
+#'    \item{nwords}{Total number of words from this speaker}
+#'    \item{sex}{Sex of speaker}
+#'    \item{year}{Year of interview}
+#'    \item{age}{Age of speaker at time of interview}
+#'    \item{ethnicity}{A number of single character codes for speakers' ethnicity}
+#'    \item{schooling}{Number of years of schooling}
+#'    \item{transcribed}{Total number of transcribed seconds of interview}
+#'    \item{total}{Total length of recording}
+#'    \item{nvowels}{Number of measured stressed vowels (irrelevant to UM/UH)}
+#'  }
+#'  
+#' @source Philadelphia Neighborhood Corpus
+"um_PNC"
+```
+
+Just add a few new lines, and enter your own documentation. It must include the name of the object in quotes following the documentation block.
+
+For more information on documenting data, see here: [http://r-pkgs.had.co.nz/data.html](http://r-pkgs.had.co.nz/data.html)
+
+## Document your contribution
+
+In the `Description` file, add your information in the `Authors@R` vector. It should look something like this:
+
+    Authors@R: c(
+              person("Josef", "Fruehwald", email = "josef.frueh@ed.ac.uk",
+                      role = c("aut", "cre")),
+              person("John", "doe", email = "fakeperson@university.edu".
+                      role = "aut")
+            )
+
+## Document your data
+
+If you are using devtools, use the function `use_vignette()` to generate an R markdown vignette in the `vignettes` directory.
