@@ -4,7 +4,7 @@ author: "Josef Fruehwald"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteIndexEntry{The PNC Data}
   %\VignetteEngine{knitr::rmarkdown}
   %\usepackage[utf8]{inputenc}
 ---
@@ -20,6 +20,8 @@ Packages used in this vignette:
   library(reshape2)
   library(ggplot2)
   library(mgcv)
+  library(knitr)
+  opts_chunk$set(message = F)  
 ```
 
 A glimpse at the data:
@@ -45,7 +47,7 @@ First, the basic effect, looking just at "um" preference. It's a pretty wopping 
 
   ggplot(speaker_prefs, aes(DOB, um_pref, color = sex))+
     geom_point(aes(size = n))+
-    stat_smooth(se = F)+
+    stat_smooth(se = F, aes(weight = log(n)))+
     scale_size_area()+
     theme_bw()
 ```
@@ -140,7 +142,30 @@ If we exclude absolute initial cases, are filled pauses drifting towards the fro
     summarise(prop_start = mean(prop_start))%>%
     ggplot(., aes(year-age, prop_start, color = sex, shape = word, linetype = word))+
       geom_point()+
+      geom_hline(y = c(0,1))+
       stat_smooth(se = F)+
+      theme_bw()
+```
+
+It looks a bit like "Um" comes a little later in a chunk than "Uh".
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  um_PNC %>%
+    filter(chunk_start != start_time)%>%
+    mutate(chunk_dur = chunk_end - chunk_start,
+           rel_start = start_time - chunk_start,
+           prop_start = rel_start/chunk_dur)%>%
+    group_by(age, year, sex, word, idstring)%>%
+    summarise(prop_start = mean(prop_start))%>%
+    dcast(idstring + year + age + sex ~ word, value.var = "prop_start")%>%
+    ggplot(., aes(sex, UM-UH, color = sex))+
+      geom_point(position = position_jitter(width = 0.1, height = 0), alpha = 0.6)+
+      ## Mean and bootstrapped error
+      stat_summary(fun.data = mean_cl_boot,
+                   B = 10000,
+                   size = 1,
+                   color = "black")+
+      geom_hline(y = 0)+
       theme_bw()
 ```
 
