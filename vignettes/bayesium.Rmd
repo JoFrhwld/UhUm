@@ -38,7 +38,7 @@ To put it in STEMy terms, there is more than 1 bit of entropy to gender expressi
 But all I have to work with is whether field workers over the past 40 years jotted down an "m" or an "f" on interview report forms.
 But just like any other kind of analysis based on imperfect data, the results here are probably going to approximate the situation in reality.
 
-```{r}
+```{r message = F}
   library("UhUm")
   load_install("dplyr")
   load_install("magrittr")
@@ -47,6 +47,8 @@ But just like any other kind of analysis based on imperfect data, the results he
   load_install("mgcv")
   load_install("knitr")
   load_install("babynames")
+
+  opts_chunk$set(message = F)
 ```
 
 
