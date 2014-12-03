@@ -25,7 +25,7 @@ def listTextGrids(streetDirs):
 
     tglist = []
     for street in streetDirs:
-        print(street)
+        #print(street)
         speakerDirs = [x for x in glob.glob(os.path.join(street, "*"))\
                          if os.path.isdir(x)]
 
@@ -133,7 +133,7 @@ def cleanTier(intervalTier):
         else:
             newInterval = praat.Interval(mark = thisInterval.mark(),
                                          xmin = thisInterval.xmin(),
-                                         xmax = lastInterval.xmax())
+                                         xmax = thisInterval.xmax())
             newTier.append(newInterval)
             counter += 1
     return(newTier)
@@ -150,6 +150,7 @@ def scanTextGrid(tgfile):
     originalPhoneTier = tg[0]
     originalWordTier = tg[1]
     newWordTier = cleanTier(originalWordTier)
+    newPhoneTier = cleanTier(originalPhoneTier)
 
     outData = []
     nwords = 0
@@ -159,6 +160,16 @@ def scanTextGrid(tgfile):
             nwords += 1
 
         if newWordTier[i].mark() in ["UM", "UH"]:
+            if newWordTier[i-1].mark() == "AND":
+                outWord = "AND_"+newWordTier[i].mark()
+            else:
+                outWord = newWordTier[i].mark()
+
+            if newWordTier[i].mark() == "UM" and newWordTier[i+1].mark() == "UH":
+            	print "\tum_uh"
+                outWord = "UM_UH"
+            elif newWordTier[i].mark() == "UH" and newWordTier[i-1].mark()=="UM":
+                continue
 
             startTime = newWordTier[i].xmin()
             endTime = newWordTier[i].xmax()
@@ -175,6 +186,18 @@ def scanTextGrid(tgfile):
                 nasalStart = None
                 nasalEnd = None
 
+            nextSegIndex = getIntervalAtTime(newPhoneTier, endTime + 0.001)
+            if nextSegIndex + 1 > len(newPhoneTier):
+                nextSeg = None
+                nextSegStart = None
+                nextSegEnd = None
+            else:
+                nextSeg = newPhoneTier[nextSegIndex].mark()
+                nextSegStart = newPhoneTier[nextSegIndex].xmin()
+                nextSegEnd = newPhoneTier[nextSegIndex].xmax()
+
+
+
             #print(str(newWordTier[i]))
             prevSpIndex = findPreviousSp(newWordTier, i, 0.2)
             prevSpInterval = newWordTier[prevSpIndex]
@@ -186,10 +209,11 @@ def scanTextGrid(tgfile):
 
             chunkEnd = nextSpInterval.xmin()
 
-            outData.append([newWordTier[i].mark(), 
+            outData.append([outWord, 
                             startTime, endTime, 
                             vowelStart, vowelEnd, 
-                            nasalStart, nasalEnd, 
+                            nasalStart, nasalEnd,
+                            nextSeg, nextSegStart, nextSegEnd, 
                             chunkStart, chunkEnd])
 
     outData = [x + [nwords] for x in outData]
@@ -205,7 +229,8 @@ def runScan(tglist, outfile, header):
     outwriter = csv.writer(outfile, delimiter = "\t") 
     outwriter.writerow(header)
 
-    for tgfile in tglist:   
+    for tgfile in tglist:
+        print(tgfile)   
         fileBase = os.path.basename(tgfile)
         idstring = re.sub("(PH[0-9]+-[0-9]+-[0-9]+-).*", "\\1", fileBase)
         umData = scanTextGrid(tgfile)
@@ -228,10 +253,12 @@ header = ["word",
           "start_time", "end_time", 
           "vowel_start", "vowel_end",
           "nasal_start", "nasal_end",
+          "next_seg", "next_seg_start", "next_seg_end",
           "chunk_start", "chunk_end",
           "nwords",
           "idstring"]
 
 runScan(tglist, "../extdata/PNC_uh_um.txt", header)
+
 
 

@@ -16,11 +16,12 @@ If you've installed the R package, the raw PNC data with demographic information
 Packages used in this vignette:
 ```{r message=FALSE}
   library(UhUm)
-  library(dplyr)
-  library(reshape2)
-  library(ggplot2)
-  library(mgcv)
-  library(knitr)
+  load_install("dplyr")
+  load_install("reshape2")
+  load_install("ggplot2")
+  load_install("mgcv")
+  load_install("knitr")
+  load_install("lme4")
   opts_chunk$set(message = F)  
 ```
 
@@ -34,8 +35,15 @@ A glimpse at the data:
 
 First, the basic effect, looking just at "um" preference. It's a pretty wopping date of birth effect.
 
+```{r}
+  um_uh <- um_PNC%>%
+              filter(word %in% c("UM","UH"))%>%
+              mutate(DOB = year-age,
+                     is_um = (word == "UM")*1)
+```
+
 ```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%"}
-  um_PNC %>%
+  um_uh %>%
     mutate(DOB = year-age,
            dob_decade = floor(DOB/10)*10,
            age_decade = floor(age/10)*10,
@@ -87,7 +95,7 @@ Estimating the gender effect in each date of birth cohort. Looks to be narrowing
 
 Just messing around to see if "uh" to "um" could be construed as a gradual or gradient adding on of the final nasal. Doesn't really look like it.
 ```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%"}
-  um_PNC%>%
+  um_uh%>%
     filter(word == "UM")%>%
     mutate(DOB = year-age,
            nasal_ratio = (nasal_end-nasal_start)/(vowel_end-vowel_start))%>%
@@ -105,7 +113,7 @@ Just messing around to see if "uh" to "um" could be construed as a gradual or gr
 So how about this turn inital "um"? The PNC isn't annotated for turns exactly, but looking just at whether it's speech chunk initial, it looks like there *is* an effect, but it's not gender stratified, and affects both words.
 
 ```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
-  initial_um <- um_PNC%>%
+  initial_um <- um_uh%>%
                     #filter out co-extensive ums
                     filter(!(start_time == chunk_start & end_time == chunk_end))%>%
                     mutate(initial = (chunk_start == start_time)*1)
@@ -133,7 +141,7 @@ So how about this turn inital "um"? The PNC isn't annotated for turns exactly, b
 If we exclude absolute initial cases, are filled pauses drifting towards the front of speech chunks? Maybe? The slope is kind of weak though.
 
 ```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
-  um_PNC %>%
+  um_uh %>%
     filter(chunk_start != start_time)%>%
     mutate(chunk_dur = chunk_end - chunk_start,
            rel_start = start_time - chunk_start,
@@ -150,7 +158,7 @@ If we exclude absolute initial cases, are filled pauses drifting towards the fro
 It looks a bit like "Um" comes a little later in a chunk than "Uh".
 
 ```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
-  um_PNC %>%
+  um_uh %>%
     filter(chunk_start != start_time)%>%
     mutate(chunk_dur = chunk_end - chunk_start,
            rel_start = start_time - chunk_start,
@@ -169,3 +177,190 @@ It looks a bit like "Um" comes a little later in a chunk than "Uh".
       theme_bw()
 ```
 
+## Duration of Following Pauses
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  um_uh %>%
+        mutate(DOB = year-age,
+           dob_decade = floor(DOB/10)*10,
+           age_decade = floor(age/10)*10,
+           # this coerces a logical to numeric
+           fol_pause = (next_seg == "sp")*1)%>%
+    group_by(age, year, DOB, sex, age_decade, word, dob_decade, idstring)%>%
+    summarise(fol_pause = mean(fol_pause))%>%
+    ggplot(., aes(DOB, fol_pause, color = sex, linetype = word))+
+      geom_point()+
+      stat_smooth(se = F)+
+      facet_wrap(~word)
+              
+```
+
+
+```{r fig.width = 12/1.25, fig.height = 5/1.25, out.width = "100%", fig.show = 'hold'}
+  um_uh$Fol_code <- "misc"
+  um_uh$Fol_code[grepl("[A-Z]", um_uh$next_seg)] <- "consonant"
+  um_uh$Fol_code[grepl("[AEIOU]", um_uh$next_seg)] <- "vowel"
+  um_uh$Fol_code[um_uh$next_seg  == "sp"] <- "pause"
+
+  um_uh %>%
+            mutate(DOB = year-age,
+           dob_decade = floor(DOB/10)*10,
+           age_decade = floor(age/10)*10,
+           # this coerces a logical to numeric
+           fol_pause = (next_seg == "sp")*1,
+           is_um = (word == "UM") * 1)%>%
+      filter(Fol_code != "misc" )%>%
+      group_by(age, year, DOB, sex, age_decade, Fol_code, dob_decade, idstring)%>%
+      summarise(is_um = mean(is_um)) -> speaker_pref_context
+
+  speaker_pref_context%>%
+    group_by(sex, dob_decade, Fol_code)%>%
+    summarise(is_um = mean(is_um)) -> decade_mean_context
+
+  ggplot(speaker_pref_context, aes(DOB, is_um, color = Fol_code)) + 
+      geom_point()+
+      geom_point(data = decade_mean_context, aes(dob_decade), size = 3)+
+      geom_line(data = decade_mean_context, aes(dob_decade))+
+      facet_wrap(~sex)+
+      scale_color_brewer(palette = "Dark2")+
+      theme_bw()
+```
+
+
+```{r fig.width = 12/1.25, fig.height = 5/1.25, out.width = "100%", fig.show = 'hold'}
+
+  ggplot(speaker_pref_context, aes(DOB, is_um, color = sex)) + 
+      geom_point()+
+      geom_point(data = decade_mean_context, aes(dob_decade), size = 3)+
+      geom_line(data = decade_mean_context, aes(dob_decade))+
+      facet_wrap(~Fol_code)+
+      scale_color_brewer(palette = "Dark2")+
+      theme_bw()
+```
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  um_uh %>%
+     mutate(DOB = year-age,
+            DOB0 = DOB - 1950,
+           dob_decade = floor(DOB/10)*10,
+           age_decade = floor(age/10)*10,
+           # this coerces a logical to numeric
+           fol_pause = (next_seg == "sp")*1,
+           is_um = (word == "UM") * 1)%>%
+      filter(sex == "f")->um_to_model
+
+  mod <- glmer(is_um ~ DOB0 * Fol_code + (1| idstring),
+               family = binomial, 
+               data = um_to_model)#,
+               #control=glmerControl(optimizer = "bobyqa"))
+
+  summary(mod)
+```
+
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  um_uh%>%
+    filter(next_seg  == "sp")%>%
+    mutate(DOB= year-age,
+           seg_dur = next_seg_end - next_seg_start)%>%
+    group_by(age, year, DOB, sex, word, idstring)%>%
+    summarise(seg_dur = log10(mean(seg_dur)))%>%
+    ggplot(., aes(DOB, seg_dur, color = word))+
+      stat_smooth()
+```
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+
+  um_uh%>%
+    filter(next_seg  == "sp")%>%
+    mutate(DOB= year-age,
+           seg_dur = next_seg_end - next_seg_start)%>%
+    group_by(age, year, DOB, sex, word, idstring)%>%
+    summarise(seg_dur = log10(mean(seg_dur)))%>%
+    ggplot(., aes(word, seg_dur))+
+      geom_jitter()+
+      stat_summary(fun.data = mean_cl_boot, color = "red")  
+
+
+```
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  um_uh%>%
+    filter(next_seg  == "sp")%>%
+    mutate(DOB= year-age,
+           seg_dur = next_seg_end - next_seg_start)%>%
+    group_by(age, year, DOB, sex, word, idstring)%>%
+    summarise(seg_dur = log10(mean(seg_dur)))%>%
+    ggplot(., aes(word, seg_dur, color = sex))+
+      stat_summary(fun.data = mean_cl_boot)  
+```
+
+```{r}
+  um_uh%>%
+    filter(next_seg  == "sp")%>%
+    mutate(DOB= year-age,
+           decade = floor(DOB/10)*10,
+           seg_dur = next_seg_end - next_seg_start)%>%
+    group_by(age, decade, year, DOB, sex, word, idstring)%>%
+    summarise(seg_dur = log10(mean(seg_dur)))%>%
+    group_by(sex,decade, word)%>%
+    summarise(seg_dur = mean(seg_dur))%>%
+    summarise(diff = diff(seg_dur))%>%
+    ggplot(., aes(decade, diff, color = sex))+
+      geom_point()+
+      geom_line()
+```
+
+
+```{r}
+  um_uh%>%
+    filter(next_seg  == "sp")%>%
+    mutate(DOB= year-age,
+            DOB0 = DOB - 1950,
+           seg_dur = next_seg_end - next_seg_start,
+           seg_dur0 = log2(seg_dur)-median(log2(seg_dur)),
+           is_um = (word == "UM")*1)%>%
+    filter(seg_dur < 3)->dur_effect_data
+
+  dur_mod <- glmer(is_um ~ seg_dur0*DOB0*sex + (seg_dur0|idstring), data = dur_effect_data, family = binomial,
+                   glmerControl(optimizer="bobyqa"))
+  dur_mod2 <- glmer(is_um ~ seg_dur0*sex + DOB0*sex + (seg_dur0|idstring), data = dur_effect_data, family = binomial,
+                    glmerControl(optimizer="bobyqa"))
+
+
+  anova(dur_mod, dur_mod2)
+```
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  dur_effect_data %>%
+    mutate(decade = floor(DOB/10)*10,
+           seg_dur_cat = cut(seg_dur0, 5))%>%
+    group_by(decade, seg_dur_cat, sex, idstring)%>%
+    summarise(is_um = mean(is_um), n = n())%>%
+    summarise(is_um = mean(is_um), n = sum(n))%>%
+    filter(n > 10)%>%
+    ggplot(., aes(seg_dur_cat, is_um, color = sex))+
+      geom_point()+
+      geom_line(aes(group = sex))+
+      ylim(0,1)+
+      facet_wrap(~decade)
+
+```
+
+## Education
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%", fig.show = 'hold'}
+  um_uh%>%
+    mutate(DOB = year-age,
+           edu = as.numeric(as.character(schooling)),
+           higher = edu > 12,
+           is_um = (word == "UM")*1)%>%
+    filter(!is.na(edu), next_seg == "sp")%>%
+    group_by(higher, sex, DOB, idstring)%>%
+    summarise(is_um = mean(is_um))%>%
+    ggplot(., aes(DOB, is_um, color = higher))+
+      geom_point()+
+      stat_smooth(se = F)+
+      facet_wrap(~sex)
+
+```

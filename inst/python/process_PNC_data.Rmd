@@ -49,7 +49,7 @@ um_PNC %>% glimpse()
 Save the result (not to be run every time)
 
 ```{r}
-# save(um_PNC, file="data/um_PNC.rda")
-# write.table(um_PNC, file = "inst/extdata/PNC_uh_um_demographics.txt", 
-#             sep = "\t", row.names = F)
+#  save(um_PNC, file="data/um_PNC.rda")
+#  write.table(um_PNC, file = "inst/extdata/PNC_uh_um_demographics.txt", 
+#              sep = "\t", row.names = F)
 ```

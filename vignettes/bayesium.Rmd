@@ -1,0 +1,352 @@
+---
+title: "Can filled pauses tell you alot about someone?"
+author: "Josef Fruehwald"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_document
+vignette: >
+  %\VignetteIndexEntry{Can filled pauses tell you alot about someone?}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+> tl;dr: Despite the relatively strong effect of gender on filled pause preference, filled pauses are not a very informative signal of your gender.
+
+So, there's been a lot media attention surrounding a series of Language Log posts on filled pauses that I have also contributed to.
+Mark Liberman [has already posted](http://languagelog.ldc.upenn.edu/nll/?p=15048) about how some of the coverage has a sort of "whisper down the lane" quality.
+It all bears a resemblance to things we've written and said, but with plenty of random perturbation.
+
+What really interested me about some of the headlines, though, was the recurring theme that your choice of filled pause could "reveal" something about you as a speaker. The Scotsman headline, for instance, read
+
+> [It’s…er…really revealing…y’know](http://www.scotsman.com/news/lori-anderson-it-s-er-really-revealing-y-know-1-3569856)
+
+It gets a bit more extreme than that just under the headline.
+
+> Lori Anderson finds meaningless sounds we make to fill pauses could determine if we’ll vote Ukip or pen a No 1 hit
+
+This is like some kind of bizarro world Sapir-Whorf. It's like correlation, causality and prediction can run in any which direction! Here's the best thumbnail description of what we all *have* found.
+
+- It looks like gender and age are predictive of the frequency with which someone will use "um" or "uh" when they use a filled pause.
+
+That isn't the same thing as saying that your filled pause usage predicts your gender and age, and gender and age are only some predictors for voting patterns, and No 1 hitmaking ability!
+And let's just real quick think about what it is your filled pause use is supposedly revealing: just gender and age, perhaps two of the most aggressively signaled social statuses there are already!
+It's hard to see what unique information your filled pause preference could add to the signal.
+
+But, I thought it would be interesting to try to calculate how good of a signal your filled pause preference is for something like gender.
+There are ways to calculate how much information there is to communicate in a message, and how much information a particular signal can carry.
+These estimations involve calculating probabilities over possible messages, and that's where I need to provide a really big caveat that the rest of this analysis is fairly broken.
+To put it in STEMy terms, there is more than 1 bit of entropy to gender expression.
+But all I have to work with is whether field workers over the past 40 years jotted down an "m" or an "f" on interview report forms.
+But just like any other kind of analysis based on imperfect data, the results here are probably going to approximate the situation in reality.
+
+```{r}
+  library("UhUm")
+  load_install("dplyr")
+  load_install("magrittr")
+  load_install("reshape2")
+  load_install("ggplot2")
+  load_install("mgcv")
+  load_install("knitr")
+  load_install("babynames")
+```
+
+
+First things first.
+Here's the PNC data, where I've calculated the average rate of all filled pauses per 1000 words for each decade of date of birth we have.
+The point of doing this is to show that the over-all rate of filled pause use is pretty noisy, maybe declining a little bit with more recent generations, and probably no real relationship to gender.
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25}
+  um_PNC%>%
+    filter(word %in% c("UH","UM"))%>%
+    mutate(DOB = year-age,
+           decade = floor(DOB/10)*10) -> um_uh
+
+  um_uh%>%
+    group_by(decade, sex, idstring)%>%
+    summarise(n = n(),
+              nwords = max(nwords))%>%
+    summarise(fp_freq = exp(mean(log(n/nwords)))*1000)%>%
+    filter(decade > 1880)%>%
+    ggplot(., aes(decade, fp_freq, color = sex))+
+      geom_point()+
+      geom_line()+
+      ylab("filled pause frequency per 1000 words")+
+      scale_color_brewer("gender", palette = "Dark2")+
+      expand_limits(y=0)+
+      theme_bw()    
+
+```
+
+
+```{r}
+
+  entropy <- function(probs){
+    sum(probs * log2(1/probs), na.rm = T)
+  }
+
+
+  um_uh%>%
+    mutate(is_um = (word == "UM")*1,
+           dob= year-age,
+           decade = floor((year-age)/10)*10,
+           schooling = as.numeric(as.character(schooling)))%>%
+    group_by(decade,dob,sex, idstring, schooling)%>%
+    summarise(is_um = mean(is_um))->speaker_means
+
+  speaker_means %>%
+    group_by(decade, sex)%>%
+    summarise(is_um = mean(is_um), 
+              n = n())%>%
+    mutate(n = sum(n))%>%
+    filter(n > 5) -> um_probs
+
+  um_probs %>%
+    summarise(joint = entropy(c(is_um * 0.5, (1-is_um)*0.5)),
+              sex = entropy(c(0.5, 0.5)),
+              um = entropy(c(sum(is_um * 0.5), sum((1-is_um)*0.5))),
+              um_prob = sum(is_um * 0.5),
+              mutual_info = sex + um - joint)->entropies
+  
+
+```
+
+Now, here's what's been the topic of conversation. 
+This is the probability of using "Um" or "Uh" when you do use a filled pause as a function of your date of birth and gender.
+We're still investigating what's gointg on here, but I have to say this graph looks like a healthy change in progress.
+It's got a nice S-shape, and women are somewhere between 20 and 30 years in advance of men.
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25}
+  ggplot(um_probs, aes(decade+5, is_um, color = sex))+
+    geom_point(data = speaker_means, aes(x = dob), size = 1)+
+    geom_point()+
+    geom_line()+
+    theme_bw()+
+    geom_hline(y = c(0,1), color = "grey40")+
+    xlab("date of birth")+
+    scale_color_brewer(palette = "Dark2")+
+    theme_bw()
+```
+
+The tempting thing to do next, which a lot of the media reports have done, is to invert this figure.
+The reasoning goes that since gender and age are good predictors of filled pause preference, your filled pause preference is good signal of your gender and age.
+But it doesn't really work like that.
+
+Lets focus on this idea of your filled pauses "revealing" aspects of your identity.
+This seems to be explicitly framing the problem in terms of signalling, so I'll be analyzing the data in terms of its **entropy** and **mutual information**.
+To simplify things a bit,
+
+- The entropy of a message is a measure of how much information there is to communicate.
+- The mutual information between a signal and a message is a measure of how much information the signal is successfully carrying.
+
+Without getting into details, the entropy of a message depends on the probability 
+
+
+```{r fig.width = 10/1.25, fig.height = 5/1.25}
+  ggplot(entropies, aes(decade)) + 
+    geom_ribbon(aes(ymax = 1, ymin = 0), alpha = 0.2, color = "grey30") + 
+    geom_line(aes(y = mutual_info, color = "mutual\ninformation"), size = 1)+
+    geom_ribbon(aes(min = 0, ymax = mutual_info, fill = "mutual\ninformation"), color = "black")+
+    ylab("bits")+
+    theme_bw()+
+    scale_color_brewer(name = "", palette = "Dark2")+
+    scale_fill_brewer(name = "", palette = "Dark2")+
+    ggtitle("marginal entropy - gender")
+```
+
+<!--
+```{r fig.width = 10/1.25, fig.height = 5/1.25}
+  ggplot(entropies, aes(decade)) + 
+    geom_ribbon(aes(ymax = um, ymin = 0), alpha = 0.3, color = "grey30") + 
+    geom_line(aes(y = mutual_info, color = "mutual\ninformation"), size = 1)+
+    ylab("bits")+
+    scale_color_brewer(name = "", palette = "Dark2")+
+    theme_bw()+
+    ggtitle("marginal entropy - filled pause")
+```
+-->
+
+```{r}
+babynames%>%
+  mutate(last_letter = gsub("[A-Za-z]+([a-z]$)", "\\1", name),
+         first_letter = gsub("(^[A-Z]).*", "\\1", name),
+         decade = floor(year/10)*10) -> baby2
+   
+
+baby2%>%
+  group_by(decade,sex, name)%>%
+  summarise(n2 = sum(n))%>%
+  group_by(decade)%>%
+  summarise(joint_entropy= entropy(n2/sum(n2))) -> name_joint_entropy
+
+baby2%>%
+  group_by(decade, name)%>%
+  summarise(n2 = sum(n))%>%
+  summarise(margin_letter = entropy(n2/sum(n2)))->name_margin_entropy
+
+name_entropies <- merge(name_joint_entropy, name_margin_entropy)%>%
+                    mutate(signal = "name",
+                           mutual_info = margin_letter + 1 - joint_entropy)
+```
+
+```{r}
+baby2%>%
+  group_by(decade,sex, first_letter)%>%
+  summarise(n2 = sum(n))%>%
+  group_by(decade)%>%
+  summarise(joint_entropy= entropy(n2/sum(n2))) -> firstL_joint_entropy
+
+baby2%>%
+  group_by(decade, first_letter)%>%
+  summarise(n2 = sum(n))%>%
+  summarise(margin_letter = entropy(n2/sum(n2)))->firstL_margin_entropy
+
+firstL_entropies <- merge(firstL_joint_entropy, firstL_margin_entropy)%>%
+                    mutate(signal = "first_letter",
+                           mutual_info = margin_letter + 1 - joint_entropy)
+```
+
+```{r}
+baby2%>%
+  group_by(decade,sex, last_letter)%>%
+  summarise(n2 = sum(n))%>%
+  group_by(decade)%>%
+  summarise(joint_entropy= entropy(n2/sum(n2))) -> lastL_joint_entropy
+
+baby2%>%
+  group_by(decade, last_letter)%>%
+  summarise(n2 = sum(n))%>%
+  summarise(margin_letter = entropy(n2/sum(n2)))->lastL_margin_entropy
+
+lastL_entropies <- merge(lastL_joint_entropy, lastL_margin_entropy)%>%
+                    mutate(signal = "last_letter",
+                           mutual_info = margin_letter + 1 - joint_entropy)
+```
+
+```{r}
+  entropies <- entropies %>% mutate(signal = "filled_pause")  
+  
+  all_signals <- rbind_list(name_entropies, firstL_entropies, lastL_entropies, entropies)
+
+```
+
+
+```{r fig.width = 10/1.25, fig.height = 5/1.25}
+ggplot(all_signals, aes(decade, mutual_info)) + 
+  geom_ribbon(aes(ymax = 1, ymin = 0), alpha = 0.3, color = "grey30") +   
+  #geom_line(size = 1) + 
+  geom_ribbon(data = all_signals %>% filter(signal == "name"), color = "black", 
+              aes(ymin = 0, ymax = mutual_info, fill = signal))+
+  geom_ribbon(data = all_signals %>% filter(signal == "last_letter"), color = "black", 
+              aes(ymin = 0, ymax = mutual_info, fill = signal))+  
+  geom_ribbon(data = all_signals %>% filter(signal == "first_letter"), color = "black", 
+              aes(ymin = 0, ymax = mutual_info, fill = signal))+  
+  geom_ribbon(data = all_signals %>% filter(signal == "filled_pause"), color = "black", 
+              aes(ymin = 0, ymax = mutual_info, fill = signal))+  
+  ylim(0,1) + 
+  scale_color_brewer(palette = "Dark2")+
+  scale_fill_brewer(palette = "Dark2")+
+  theme_bw()
+
+```
+
+
+```{r fig.width = 10/1.25, fig.height = 5/1.25}
+  um_probs %>%
+    dcast(decade ~ sex, value.var = "is_um")%>%
+    mutate(um = (f * 0.5)/((f * 0.5)+(m*0.5)),
+           uh = ((1-f)*0.5)/(((1-f)*0.5) + ((1-m)*0.5)))%>%
+    melt(id = 1, measure.vars = c("um", "uh"))%>%
+    ggplot(., aes(decade, value, color = variable))+
+      geom_hline(y = c(0, 1))+
+      geom_hline(y = 0.5, color = "grey30", linetype = 2)+
+      geom_point()+
+      geom_line()+
+      ylim(0,1)+
+      theme_bw()+
+      scale_color_brewer(palette = "Set1")
+```
+
+```{r fig.width = 10/1.25, fig.height = 5/1.25}
+  um_probs %>%
+    dcast(decade ~ sex, value.var = "is_um")%>%
+    mutate(um = (f * 0.5)/((f * 0.5)+(m*0.5)),
+           uh = ((1-f)*0.5)/(((1-f)*0.5) + ((1-m)*0.5)))%>%
+    melt(id = 1, measure.vars = c("um", "uh"))%>%
+    filter(variable == "um")%>%
+    left_join(um_probs)->um_update
+
+  ggplot(um_update, aes(is_um, value, color = sex))+
+    geom_point()+
+    geom_path()+
+    xlim(0,1)+
+    ylim(0.5,1)+
+    coord_fixed()
+```
+
+
+<!--
+```{r}
+  early <- um_uh%>%mutate(dob = year-age) %>% filter(dob >= 1900, dob < 1910)
+  late <- um_uh %>%mutate(dob = year-age) %>% filter(dob >= 1980, dob < 1990)
+
+  um_probs %>%
+    mutate(fp = "um")%>%
+    dcast(decade ~ sex+fp, value.var = "is_um")%>%
+    mutate(f_uh = 1-f_um,
+           m_uh = 1-m_um)->probs
+
+  um_probs %>%
+    filter(decade == 1980)%>%
+    mutate(fp = "um")%>%
+    dcast(decade ~ sex+fp, value.var = "is_um")%>%
+    mutate(f_uh = 1-f_um,
+           m_uh = 1-m_um)->late_probs
+
+
+  update_once <- function(word, prior, probs){
+    out <- 0
+    f_um = probs["f_um"]
+    m_um = probs["m_um"]
+    f_uh = probs["f_uh"]
+    m_uh = probs["m_uh"]
+    if(word == "UH"){
+      out <- (f_uh * prior) / ((f_uh * prior) + (m_uh * (1-prior)))
+    }else if(word == "UM"){
+      out <- (f_um * prior) / ((f_um * prior) + (m_um * (1-prior)))      
+    }
+    return(out)
+  }
+  update_vector <- function(words, probs){
+    out_vector <- rep(0, length = length(words))
+    out_vector[1] <- update_once(words[1], 0.5, probs)
+    for(i in 2:length(words)){
+      out_vector[i] <- update_once(words[i], out_vector[i-1], probs)
+    }
+    return(out_vector)
+  }
+
+  um_uh%>%
+    group_by(idstring, sex)%>%
+    mutate(dob = year-age,
+           decade = floor(dob/10)*10)%>%
+    filter(n() > 1)%>%
+    left_join(probs)%>%
+    mutate(prob_f = update_vector(words = word, probs = c(f_uh = f_uh[1], f_um = f_um[1],
+                                                  m_uh = m_uh[1], m_um = m_um[1])))->prob_f
+  
+```
+
+```{r fig.width = 10/1.25, fig.height = 5/1.25}
+  prob_f %>%
+    group_by(idstring, sex, dob)%>%
+    filter(start_time == max(start_time))%>%
+    mutate(cat_f = (prob_f > 0.5)*1)%>%
+    ggplot(., aes(dob, cat_f, color = sex))+
+      geom_point(aes(y = prob_f))+
+      stat_smooth(method = glm, family = binomial)+
+      scale_color_brewer(palette = "Dark2")+
+      theme_bw()
+
+
+```
+
+-->
