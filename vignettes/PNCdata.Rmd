@@ -51,13 +51,23 @@ First, the basic effect, looking just at "um" preference. It's a pretty wopping 
            is_um = (word == "UM")*1)%>%
     group_by(age, year, DOB, sex, age_decade, dob_decade, idstring)%>%
     summarise(um_pref = mean(is_um),
-              n = n())->speaker_prefs
+              n = n(),
+              nwords = max(nwords))->speaker_prefs
 
   ggplot(speaker_prefs, aes(DOB, um_pref, color = sex))+
     geom_point(aes(size = n))+
     stat_smooth(se = F, aes(weight = log(n)))+
     scale_size_area()+
     theme_bw()
+```
+
+```{r fig.width = 8/1.25, fig.height = 5/1.25, out.width = "80%"}
+  ggplot(speaker_prefs, aes(DOB, (n/nwords)*1000, color = sex))+
+    geom_point(aes(size = n))+
+    stat_smooth(se = F, aes(weight = log(n)))+
+    scale_size_area()+
+    theme_bw()
+
 ```
 
 Trying to tease apart generational effects from lifespan effect. Each date of birth cohort looks fairly flat. 
